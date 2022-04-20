@@ -7,7 +7,7 @@ import { Field } from '../state/swap/actions'
 import { useTransactionAdder, useHasPendingApproval } from '../state/transactions/hooks'
 import { computeSlippageAdjustedAmounts } from '../utils/prices'
 import { calculateGasMargin } from '../utils'
-import { useTokenContract, useClaimContract } from './useContract'
+import { useTokenContract } from './useContract'
 import { useActiveWeb3React } from './index'
 
 export enum ApprovalState {
@@ -15,13 +15,6 @@ export enum ApprovalState {
   NOT_APPROVED,
   PENDING,
   APPROVED
-}
-
-export enum ClaimState {
-  UNKNOWN,
-  NOT_CLAIMED,
-  PENDING,
-  CLAIMED
 }
 
 // returns a variable indicating the state of the approval and a function which approves if necessary or early returns
@@ -101,38 +94,6 @@ export function useApproveCallback(
   }, [approvalState, token, tokenContract, amountToApprove, spender, addTransaction])
 
   return [approvalState, approve]
-}
-
-export function useClaimCallback(amountToClaim?: CurrencyAmount, spender?: string): [ClaimState, () => Promise<void>] {
-  const { account } = useActiveWeb3React()
-  const claimContract = useClaimContract()
-  const addTransaction = useTransactionAdder()
-  const token = amountToClaim instanceof TokenAmount ? amountToClaim.token : undefined
-  const currentAllowance = useTokenAllowance(token, account ?? undefined, spender)
-
-  const claimState: ClaimState = useMemo(() => {
-    if (!amountToClaim || !account) return ClaimState.UNKNOWN
-    if (!currentAllowance) return ClaimState.UNKNOWN
-    if (amountToClaim.currency === CETH) return ClaimState.CLAIMED
-
-    return currentAllowance.lessThan(amountToClaim) ? ClaimState.NOT_CLAIMED : ClaimState.CLAIMED
-  }, [account, amountToClaim])
-  const claim = useCallback(async (): Promise<void> => {
-    if (claimContract == null) return
-    return claimContract
-      .claim()
-      .then((response: TransactionResponse) => {
-        addTransaction(response, {
-          summary: 'Claim'
-        })
-      })
-      .catch((error: Error) => {
-        console.debug('Failed to approve token', error)
-        throw error
-      })
-  }, [claimState, claimContract, account, addTransaction])
-
-  return [claimState, claim]
 }
 
 // wraps useApproveCallback in the context of a swap

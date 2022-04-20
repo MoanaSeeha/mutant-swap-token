@@ -19,7 +19,8 @@ import Web3Status from '../../components/Web3Status'
 import { useWeb3React } from '@web3-react/core'
 import { useTokenBalance } from '../../state/wallet/hooks'
 import { rMC, CLAIM_ADDRESS } from '../../constants'
-import { ApprovalState, ClaimState, useApproveCallback, useClaimCallback } from '../../hooks/useApproveCallback'
+import { ApprovalState, useApproveCallback } from '../../hooks/useApproveCallback'
+import { ClaimState, useClaimCallback } from '../../hooks/useClaimCallback'
 import { ChainId } from '@mutantswap/sdk'
 
 export default function Claim() {

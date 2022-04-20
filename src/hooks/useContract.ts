@@ -98,16 +98,6 @@ export function useClaimContract(): Contract | null {
   return useContract(chainId ? CLAIM_ADDRESS[chainId] : undefined, CLAIM_ABI, true)
 }
 
-export function useUSDCWNEARPoolContract(): Contract | null {
-  const contractAddress = findPoolContract(fNEAR[ChainId.AURORA], fUSDC[ChainId.AURORA])?.lpAddress
-  return useContract(contractAddress, IUniswapV2Pair_ABI)
-}
-
-export function useMCOINWNEARPoolContract(): Contract | null {
-  const contractAddress = findPoolContract(fNEAR[ChainId.AURORA], MCOIN[ChainId.AURORA])?.lpAddress
-  return useContract(contractAddress, IUniswapV2Pair_ABI)
-}
-
 function findPoolContract(tokenA: Token, tokenB: Token) {
   const pools = STAKING[ChainId.AURORA]
 
@@ -118,4 +108,14 @@ function findPoolContract(tokenA: Token, tokenB: Token) {
 
     return hasTokenA && hasTokenB
   })
+}
+
+export function useUSDCWNEARPoolContract(): Contract | null {
+  const contractAddress = findPoolContract(fNEAR[ChainId.AURORA], fUSDC[ChainId.AURORA])?.lpAddress
+  return useContract(contractAddress, IUniswapV2Pair_ABI)
+}
+
+export function useMCOINWNEARPoolContract(): Contract | null {
+  const contractAddress = findPoolContract(fNEAR[ChainId.AURORA], MCOIN[ChainId.AURORA])?.lpAddress
+  return useContract(contractAddress, IUniswapV2Pair_ABI)
 }
