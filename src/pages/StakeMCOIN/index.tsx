@@ -1,0 +1,269 @@
+import { ChainId, CurrencyAmount, JSBI } from '@mutantswap/sdk'
+import React, { useState, useCallback } from 'react'
+import styled from 'styled-components'
+import { DarkGreyCard, LightCard } from '../../components/Card'
+import { AutoColumn } from '../../components/Column'
+import Row, { RowBetween } from '../../components/Row'
+import { MCOIN, XMCOIN, BIG_INT_ZERO } from '../../constants'
+import { useActiveWeb3React } from '../../hooks'
+import { ApprovalState, useApproveCallback } from '../../hooks/useApproveCallback'
+import { tryParseAmount } from '../../state/swap/hooks'
+import { TYPE } from '../../theme'
+import { ClickableText } from '../Pool/styleds'
+import { useTokenBalance } from '../../state/wallet/hooks'
+import { DataCard, CardBGImage, CardNoise, CardSection, HighlightCard } from '../../components/earn/styled'
+import StakeInputPanel from '../../components/StakeMCOIN/StakeInputPanel'
+import CurrencyLogo from '../../components/CurrencyLogo'
+import { useMCOINBar, useMCOINBarStats } from '../../state/stakeMCO/hooks'
+import StakeMCOINDataCard from '../../components/StakeMCOIN/StakeMCOINDataCard'
+import { ButtonConfirmed, ButtonError, ButtonLight, ButtonPrimary } from '../../components/Button'
+import { useWalletModalToggle } from '../../state/application/hooks'
+import { Dots } from '../../components/swap/styleds'
+import { maxAmountSpend } from '../../utils/maxAmountSpend'
+import StakingAPRCard from './StakingAPRCard'
+import { PageWrapper } from '../../components/Page'
+
+const DataRow = styled(RowBetween)`
+  ${({ theme }) => theme.mediaWidth.upToExtraSmall`
+   flex-direction: column;
+   margin: 15px;
+ `};
+`
+
+const TopSection = styled(AutoColumn)`
+  max-width: 720px;
+  width: 100%;
+`
+
+const StakeClickableText = styled(ClickableText)<{ selected: boolean }>`
+  color: ${({ selected, theme }) => (selected ? theme.primary1 : theme.bg5)};
+  font-weight: ${({ selected }) => (selected ? 500 : 400)};
+`
+
+const LargeHeaderWhite = styled(TYPE.largeHeader)`
+  color: white;
+`
+
+enum StakeState {
+  stakeMCOIN = 'stakeMCOIN',
+  unstakeXMC = 'unstakeXMC'
+}
+
+const INPUT_CHAR_LIMIT = 18
+
+export default function StakeMCOIN() {
+  const toggleWalletModal = useWalletModalToggle() // toggle wallet when disconnected
+
+  const { chainId: _chainId, account } = useActiveWeb3React()
+  const chainId = _chainId ? _chainId! : ChainId.AURORA
+
+  const [stakeState, setStakeState] = useState<StakeState>(StakeState.stakeMCOIN)
+  const [input, _setInput] = useState<string>('')
+  const [usingBalance, setUsingBalance] = useState(false)
+  const [pendingTx, setPendingTx] = useState(false)
+  const { enter, leave } = useMCOINBar()
+
+  const isStaking = stakeState === StakeState.stakeMCOIN
+
+  const mcoinBalance = useTokenBalance(account ?? undefined, MCOIN[chainId])!
+  const xMCBalance = useTokenBalance(account ?? undefined, XMCOIN[chainId])!
+
+  const balance = isStaking ? mcoinBalance : xMCBalance
+  const parsedAmount = usingBalance ? balance : tryParseAmount(input, balance?.currency)
+
+  const [approvalState, handleApproval] = useApproveCallback(parsedAmount, XMCOIN[chainId].address)
+
+  // Reset input when toggling staking/unstaking
+  function handleStakeMCOIN() {
+    setStakeState(StakeState.stakeMCOIN)
+    setInput('')
+  }
+  function handleUnstakeXMC() {
+    setStakeState(StakeState.unstakeXMC)
+    setInput('')
+  }
+
+  function setInput(v: string) {
+    // Allows user to paste in long balances
+    const value = v.slice(0, INPUT_CHAR_LIMIT)
+
+    setUsingBalance(false)
+    _setInput(value)
+  }
+
+  const maxAmountInput: CurrencyAmount | undefined = maxAmountSpend(balance)
+  const atMaxAmountInput = Boolean(maxAmountInput && parsedAmount?.equalTo(maxAmountInput))
+
+  const handleClickMax = useCallback(() => {
+    if (maxAmountInput) {
+      setInput(maxAmountInput.toExact())
+      setUsingBalance(true)
+    }
+  }, [maxAmountInput, setInput])
+
+  function renderApproveButton() {
+    if (!isStaking) {
+      return null
+    }
+
+    return (
+      <ButtonConfirmed
+        mr="0.5rem"
+        onClick={handleApproval}
+        confirmed={approvalState === ApprovalState.APPROVED}
+        disabled={approvalState !== ApprovalState.NOT_APPROVED}
+      >
+        {approvalState === ApprovalState.PENDING ? (
+          <Dots>Approving</Dots>
+        ) : approvalState === ApprovalState.APPROVED ? (
+          'Approved'
+        ) : (
+          'Approve'
+        )}
+      </ButtonConfirmed>
+    )
+  }
+
+  function renderStakeButton() {
+    // If account balance is less than inputted amount
+    const insufficientFunds = (balance?.equalTo(BIG_INT_ZERO) ?? false) || parsedAmount?.greaterThan(balance)
+    if (insufficientFunds) {
+      return (
+        <ButtonError error={true} disabled={true}>
+          Insufficient Balance
+        </ButtonError>
+      )
+    }
+
+    const isValid =
+      // If user is unstaking, we don't need to check approval status
+      (isStaking ? approvalState === ApprovalState.APPROVED : true) &&
+      !pendingTx &&
+      parsedAmount?.greaterThan(BIG_INT_ZERO) === true
+
+    return (
+      <ButtonPrimary disabled={!isValid} onClick={handleStake}>
+        {isStaking ? 'Stake' : 'Unstake'}
+      </ButtonPrimary>
+    )
+  }
+
+  async function handleStake() {
+    try {
+      setPendingTx(true)
+
+      if (isStaking) {
+        await enter(parsedAmount)
+      } else {
+        await leave(parsedAmount)
+      }
+
+      setInput('')
+    } catch (e) {
+      console.error(`Error ${isStaking ? 'Staking' : 'Unstaking'}: `, e)
+    } finally {
+      setPendingTx(false)
+    }
+  }
+
+  const { totalMCOINStaked: totalMCOStaked } = useMCOINBarStats()
+  const totalMCOStakedFormatted = totalMCOStaked?.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+
+  return (
+    <PageWrapper gap="lg" justify="center">
+      <TopSection gap="md">
+        <HighlightCard>
+          <CardSection>
+            <AutoColumn gap="md">
+              <RowBetween>
+                <LargeHeaderWhite fontWeight={600}>Earn more MCOIN</LargeHeaderWhite>
+              </RowBetween>
+              <RowBetween>
+                <TYPE.white fontSize={14}>
+                  For every trade on MutantSwap, 0.05% of the swap fees are used to buy back MCOIN and distributed as MCOIN proportional to your share of the xMC staking pool.
+                  When your MCOIN is staked, you receive xMC in return for voting rights and a fully composable token that can interact with other protocols.
+                  Your xMC is continuously compounding, when you unstake you will receive all the originally deposited MCOIN and any additional from fees.
+                </TYPE.white>
+              </RowBetween>{' '}
+              {/* @TODO ADD LINK */}
+              {/* <ExternalLink
+                    style={{ color: 'white', textDecoration: 'underline' }}
+                    href="https://medium.com/@mutantpunksnft"
+                    target="_blank"
+                  >
+                    <TYPE.white fontSize={14}>{t('earnPage.readMoreAboutPng')}</TYPE.white>
+                  </ExternalLink> */}
+            </AutoColumn>
+          </CardSection>
+        </HighlightCard>
+      </TopSection>
+
+      <TopSection gap="md">
+        <StakingAPRCard />
+      </TopSection>
+
+      <AutoColumn gap="lg" style={{ width: '100%', maxWidth: '720px' }}>
+        <DataRow style={{ gap: '10px', margin: 0 }}>
+          <StakeMCOINDataCard label="Total MCOIN Staked">
+            <Row align="center" justifyContent="center">
+              <CurrencyLogo currency={MCOIN[chainId]} size={'20px'} style={{ marginRight: '10px' }} />
+              <TYPE.black fontWeight={400}>{totalMCOStakedFormatted ?? 'Loading...'}</TYPE.black>
+            </Row>
+          </StakeMCOINDataCard>
+          <StakeMCOINDataCard label="Balance xMC">
+            <Row align="center" justifyContent="center">
+              <CurrencyLogo currency={XMCOIN[chainId]} size={'20px'} style={{ marginRight: '10px' }} />
+              <TYPE.black fontWeight={400}>{xMCBalance?.toFixed(4) ?? 0}</TYPE.black>
+            </Row>
+          </StakeMCOINDataCard>
+          <StakeMCOINDataCard label="Unstaked MCOIN">
+            <Row align="center" justifyContent="center">
+              <CurrencyLogo currency={MCOIN[chainId]} size={'20px'} style={{ marginRight: '10px' }} />
+              <TYPE.black fontWeight={400}>{mcoinBalance?.toFixed(4) ?? 0}</TYPE.black>
+            </Row>
+          </StakeMCOINDataCard>
+        </DataRow>
+      </AutoColumn>
+
+      <AutoColumn style={{ width: '100%' }}>
+        <DarkGreyCard>
+          <AutoColumn gap="20px">
+            <RowBetween>
+              <AutoColumn gap="20px" justify="start">
+                <TYPE.mediumHeader>{isStaking ? 'Stake MCOIN' : 'Unstake xMC'}</TYPE.mediumHeader>
+              </AutoColumn>
+              <AutoColumn gap="20px">
+                <RowBetween>
+                  <StakeClickableText selected={isStaking} style={{ paddingRight: '10px' }} onClick={handleStakeMCOIN}>
+                    Stake
+                  </StakeClickableText>
+                  <StakeClickableText selected={!isStaking} onClick={handleUnstakeXMC}>
+                    Unstake
+                  </StakeClickableText>
+                </RowBetween>
+              </AutoColumn>
+            </RowBetween>
+            <StakeInputPanel
+              value={input!}
+              onUserInput={setInput}
+              showMaxButton={!atMaxAmountInput}
+              currency={isStaking ? MCOIN[chainId] : XMCOIN[chainId]}
+              id="stake-currency-input"
+              onMax={handleClickMax}
+            />
+          </AutoColumn>
+          <div style={{ marginTop: '1rem' }}>
+            {account == null ? (
+              <ButtonLight onClick={toggleWalletModal}>Connect Wallet</ButtonLight>
+            ) : (
+              <RowBetween>
+                {renderApproveButton()}
+                {renderStakeButton()}
+              </RowBetween>
+            )}
+          </div>
+        </DarkGreyCard>
+      </AutoColumn>
+    </PageWrapper>
+  )
+}

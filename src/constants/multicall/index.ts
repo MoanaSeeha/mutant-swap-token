@@ -1,0 +1,11 @@
+import { ChainId } from '@mutantswap/sdk'
+import MULTICALL_ABI from './abi.json'
+
+const MULTICALL_NETWORKS = {
+  [ChainId.FUJI]: '0xb465Fd2d9C71d5D6e6c069aaC9b4E21c69aAA78f',
+  [ChainId.AVALANCHE]: '0x0FB54156B496b5a040b51A71817aED9e2927912E',
+  [ChainId.POLYGON]: '0x11ce4B23bD875D7F5C6a31084f55fDe1e9A87507',
+  [ChainId.AURORA]: '0x072E6a10e9Ed1F15E577A095ACb6fD2CF0014ae0' //TODO Change to multicall mainnet
+}
+
+export { MULTICALL_ABI, MULTICALL_NETWORKS }
